@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Food AI Scanner</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; background-color: #f4f4f9; padding: 20px; margin: 0; }
+        .container { max-width: 400px; margin: 0 auto; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        h1 { font-size: 20px; color: #333; margin-bottom: 20px; }
+        input[type="file"] { display: none; }
+        .upload-btn { background-color: #28a745; color: white; padding: 12px 20px; border-radius: 8px; cursor: pointer; display: inline-block; font-weight: bold; margin-bottom: 15px; }
+        #preview { width: 100%; border-radius: 8px; margin-top: 10px; display: none; max-height: 250px; object-fit: cover; }
+        #loading { display: none; margin-top: 15px; color: #007bff; font-weight: bold; }
+        #result { margin-top: 20px; display: none; text-align: left; background: #e9ecef; padding: 15px; border-radius: 8px; }
+        .scan-btn { background-color: #007bff; color: white; border: none; padding: 12px 20px; border-radius: 8px; cursor: pointer; width: 100%; font-weight: bold; font-size: 16px; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Smart Food AI Scanner</h1>
+    
+    <label for="imageInput" class="upload-btn">📸 Khane Ki Tasveer Lein</label>
+    <input type="file" id="imageInput" accept="image/*" capture="environment">
+    
+    <img id="preview" alt="Preview">
+    
+    <button id="scanBtn" class="scan-btn" onclick="scanFood()">Analyze Food</button>
+    
+    <div id="loading">Khana pehchana ja raha hai...</div>
+    
+    <div id="result">
+        <h3 id="foodName" style="margin-top:0;"></h3>
+        <p><strong>Calories:</strong> <span id="calories"></span></p>
+        <p><strong>Protein:</strong> <span id="protein"></span></p>
+        <p><strong>Carbs:</strong> <span id="carbs"></span></p>
+        <p><strong>Fat:</strong> <span id="fat"></span></p>
+    </div>
+</div>
+
+<script>
+    const imageInput = document.getElementById('imageInput');
+    const preview = document.getElementById('preview');
+    const scanBtn = document.getElementById('scanBtn');
+    const loading = document.getElementById('loading');
+    const resultDiv = document.getElementById('result');
+    
+    let base64Image = "";
+
+    imageInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                base64Image = event.target.result;
+                preview.src = base64Image;
+                preview.style.display = 'block';
+                scanBtn.style.display = 'block';
+                resultDiv.style.display = 'none';
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    async function scanFood() {
+        if (!base64Image) {
+            alert("Pehle tasveer select karein.");
+            return;
+        }
+
+        loading.style.display = 'block';
+        scanBtn.style.display = 'none';
+        resultDiv.style.display = 'none';
+
+        try {
+            const response = await fetch('/api/scan-food', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: base64Image })
+            });
+
+            const resData = await response.json();
+            loading.style.display = 'none';
+
+            if (resData.success) {
+                document.getElementById('foodName').innerText = resData.data.food_name || 'Food Detected';
+                document.getElementById('calories').innerText = resData.data.calories || 'N/A';
+                document.getElementById('protein').innerText = resData.data.protein || 'N/A';
+                document.getElementById('carbs').innerText = resData.data.carbs || 'N/A';
+                document.getElementById('fat').innerText = resData.data.fat || 'N/A';
+                resultDiv.style.display = 'block';
+            } else {
+                alert("Error: " + (resData.error || "Shanakht na ho saki."));
+                scanBtn.style.display = 'block';
+            }
+        } catch (err) {
+            loading.style.display = 'none';
+            scanBtn.style.display = 'block';
+            alert("Server se connection nahi ho saka: " + err.message);
+        }
+    }
+</script>
+
+</body>
+</html>
