@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI AI Food & Calorie Scanner</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f7f6; margin: 0; padding: 20px; text-align: center; color: #333; }
+        .container { max-width: 500px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { color: #2e7d32; margin-bottom: 5px; }
+        p { color: #666; font-size: 14px; }
+        .video-box { width: 100%; height: 280px; background: #000; border-radius: 10px; overflow: hidden; position: relative; margin-bottom: 15px; }
+        video, canvas { width: 100%; height: 100%; object-fit: cover; }
+        .btn-group { display: flex; gap: 10px; justify-content: center; margin-bottom: 15px; }
+        button { background: #2e7d32; color: white; border: none; padding: 12px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; flex: 1; font-size: 15px; transition: 0.2s; }
+        button:hover { background: #1b5e20; }
+        button.secondary { background: #0288d1; }
+        button.secondary:hover { background: #01579b; }
+        input[type="file"] { display: none; }
+        .file-label { background: #757575; color: white; padding: 12px; border-radius: 8px; cursor: pointer; flex: 1; font-weight: bold; }
+        #loading { display: none; margin: 15px 0; font-weight: bold; color: #0288d1; }
+        .result-card { display: none; background: #e8f5e9; border: 1px solid #c8e6c9; border-radius: 10px; padding: 15px; text-align: right; margin-top: 15px; }
+        .result-card h2 { margin-top: 0; color: #1b5e20; display: flex; justify-content: space-between; }
+        .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 10px; }
+        .stat-box { background: white; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0; text-align: center; }
+        .stat-box strong { font-size: 18px; color: #2e7d32; display: block; }
+        .barcode-input { display: flex; gap: 5px; margin-top: 10px; }
+        .barcode-input input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 6px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🥗 Smart Food AI Scanner</h1>
+    <p>تصویر لیں یا بارکوڈ دیں اور فوراً مکمل نیوٹریشن چیک کریں</p>
+
+    <div class="video-box">
+        <video id="video" autoplay playsinline></video>
+        <canvas id="canvas" style="display:none;"></canvas>
+    </div>
+
+    <div class="btn-group">
+        <button id="snap-btn">📸 فوٹو سکین کریں</button>
+        <label for="file-upload" class="file-label">📁 فائل چنیں</label>
+        <input type="file" id="file-upload" accept="image/*">
+    </div>
+
+    <div class="barcode-input">
+        <input type="text" id="barcode-code" placeholder="یا بارکوڈ نمبر درج کریں">
+        <button class="secondary" style="flex:0.5;" onclick="scanBarcode()">بارکوڈ</button>
+    </div>
+
+    <div id="loading">⏳ AI کھانے کی شناخت کر رہا ہے، انتظار کیجیے...</div>
+
+    <div class="result-card" id="result-card">
+        <h2 id="food-title">کھانے کا نام <span id="calories-badge" style="font-size:16px; color:#e65100;">0 Cal</span></h2>
+        <p id="serving-info" style="margin:2px 0; font-weight:bold;"></p>
+        
+        <div class="stat-grid">
+            <div class="stat-box">پروٹین <strong id="protein-val">0g</strong></div>
+            <div class="stat-box">کاربز <strong id="carbs-val">0g</strong></div>
+            <div class="stat-box">فیٹ <strong id="fat-val">0g</strong></div>
+            <div class="stat-box">ایکوریسی <strong id="conf-val">-</strong></div>
+        </div>
+        <p id="health-advice" style="margin-top:10px; font-size:13px; color:#444; background:#fff; padding:8px; border-radius:5px;"></p>
+    </div>
+</div>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const snapBtn = document.getElementById('snap-btn');
+    const fileUpload = document.getElementById('file-upload');
+    const loading = document.getElementById('loading');
+    const resultCard = document.getElementById('result-card');
+
+    // Start Camera
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => { video.srcObject = stream; })
+        .catch(err => console.log("کیمرہ شروع نہیں ہو سکا: ", err));
+
+    // Image Capture & Upload
+    snapBtn.addEventListener('click', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext('2d');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        canvas.toBlob(blob => {
+            sendImageToAPI(blob);
+        }, 'image/jpeg');
+    });
+
+    fileUpload.addEventListener('change', (e) => {
+        if (e.target.files[0]) {
+            sendImageToAPI(e.target.files[0]);
+        }
+    });
+
+    async function sendImageToAPI(imageBlob) {
+        showLoading(true);
+        const formData = new FormData();
+        formData.append('image', imageBlob, 'capture.jpg');
+
+        try {
+            const res = await fetch('/api/scan-food', { method: 'POST', body: formData });
+            const json = await res.json();
+            
+            if (json.success) {
+                renderResults(json.data);
+            } else {
+                alert(json.error || "خطا پیش آئی");
+            }
+        } catch (e) {
+            alert("سروَر کنکشن میں مسئلہ ہے");
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    async function scanBarcode() {
+        const code = document.getElementById('barcode-code').value.trim();
+        if (!code) return alert("بارکوڈ کوڈ درج کریں");
+
+        showLoading(true);
+        try {
+            const res = await fetch(`/api/barcode/${code}`);
+            const json = await res.json();
+            if (json.success) {
+                renderResults(json.data);
+            } else {
+                alert("بارکوڈ کا ڈیٹا نہیں مل سکا");
+            }
+        } catch (e) {
+            alert("نیٹ ورک کی خرابی");
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    function renderResults(data) {
+        document.getElementById('food-title').innerHTML = `${data.foodNameUrdu} (${data.foodName}) <span style="color:#e65100;">${data.calories} Cal</span>`;
+        document.getElementById('serving-info').innerText = `مقدار (Serving): ${data.servingSize}`;
+        document.getElementById('protein-val').innerText = data.protein;
+        document.getElementById('carbs-val').innerText = data.carbs;
+        document.getElementById('fat-val').innerText = data.fat;
+        document.getElementById('conf-val').innerText = data.confidence;
+        document.getElementById('health-advice').innerText = "💡 مشورہ: " + (data.healthAdvice || "کوئی خاص ہدایت نہیں");
+        
+        resultCard.style.display = 'block';
+    }
+
+    function showLoading(status) {
+        loading.style.display = status ? 'block' : 'none';
+        if (status) resultCard.style.display = 'none';
+    }
+</script>
+</body>
+</html>
