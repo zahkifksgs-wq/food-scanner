@@ -117,4 +117,11 @@ app.get('/api/barcode/:code', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(module.exports = app;);
+
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
+
+module.exports = app;
